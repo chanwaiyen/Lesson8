@@ -1,0 +1,81 @@
+Predicting The Execution Of Weight Lifting Exercise 
+========================================================
+**By Chan Wai Yen**
+
+
+### Project Objective
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. In this project, similar devices were used to collect activity information during five different executions of a particular weight lifting exercise (Unilateral Dumbbell Biceps Curl): Exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Of the five classes, only Class A is the correct execution. The other classes represent common mistakes. The objective of this project is to predict which execution of the exercise is being done given the activity data.  
+
+Data for this project is kindly provided by:  
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+### Preparation & Data Loading
+
+```{r libraries, warning = FALSE, results = "hide", cache = TRUE}
+library(caret); library(randomForest); library(rpart); library(rattle) 
+set.seed(1111); # for Reproduceability
+traindata <- read.csv("pml-training.csv", na.strings = c("NA","","#DIV/0!"))
+testdata <- read.csv("pml-testing.csv", na.strings = c("NA","","#DIV/0!"))
+```
+
+Both training and test data are read into separate datasets. Inspecting the raw data, it is noted that "NA", blanks, and "#DIV/0!" are all unacceptable data and will be set to *NA*. A seed for pseudo-random generator is set for reproduceability. 
+
+### Pre-processing Of Training Data
+
+``` {r clean, cache = TRUE}
+# keep only relevant data columns
+traindata <- traindata[, -(1:7)]
+
+# remove near zero variance column
+nzv <- nearZeroVar(traindata, saveMetrics = TRUE); traindata <- traindata[, !nzv$nzv] 
+
+# remove columns with more than 50% NAs
+d <- dim(traindata)
+v <- vector(length = d[2])
+for (i in 1:d[2]) {  v[i] <- ((sum(is.na(traindata[,i]))/d[1]) < 0.50) }
+traindata <- traindata[, v]
+d2 <- dim(traindata); var <- d2[2] -1;
+```
+
+The first seven columns (e.g. user_names, raw_timestamp_part_1 etc) are removed as they do not contain the inputs to the predictive model. Variables with near zero variances are then removed. Finally variables with more then 50% missing data are removed. The final training data consist of `r var` variables.
+
+### Training (Models) & Cross Validation
+
+Two methods are employed, Decision Tree and Random Forest, each with 3-fold cross validation to estimate the out of sample error.
+
+``` {r Train, cache = TRUE}
+# Set cross validation params
+cv_params <- trainControl(method = "cv", number = 3)
+modelDT <- train(classe ~ ., data=traindata, method="rpart", trControl = cv_params)
+modelRF <- train(classe ~ ., data=traindata, method="rf", trControl = cv_params)
+DTA <- signif(max(modelDT$results$Accuracy),3); 
+RFA <- signif(max(modelRF$results$Accuracy),3); OSE <- (1 - RFA)*100
+```
+
+### Model Comparison & Estimation of Out-Of-Sample Error
+
+Accuracy for Decision Tree model is `r DTA` and that for Random Forest is `r RFA`. Random Forest model clearly out performed the Decision Tree and it will be used for prediction. The out-of-sample-error is estimated to be `r OSE`%
+
+### Prediction
+
+``` {r Predict, warning = FALSE, results = "hide"}
+Pred <- predict(modelRF, testdata)
+```
+
+Prediction for classe is done using the Random Forest Model.
+
+### Generation of the files to be submitted is made through the provided function
+
+``` {r submit}
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+
+pml_write_files(Pred)
+```
